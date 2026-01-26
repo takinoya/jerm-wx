@@ -63,6 +63,7 @@ static int hex_mode; /* hex dump モード */
 static int pipe_mode; /* シリアルに垂流し */
 static int is_server = 0; /* server モード */
 static int quit_flag;
+static int wait_for_dev_mode = 0; /* Wait for device mode */
 
 /* 行末変換のプリミティブ */
 enum rn_conv_t {
@@ -1140,8 +1141,8 @@ read_remote(int localfd, int remotefd, FILE *log)
 	if (err < 0)
 		perror("remote read");
 	else if (err == 0) {
-		fprintf(stderr, "remote closed");
-		err = -1;
+		fprintf(stderr, "<<<<<<< remote closed >>>>>>>");
+		err = -ENODEV;
 	}
 	else {
 		if (log != NULL) {
@@ -1415,6 +1416,50 @@ read_local(int localfd, int remotefd, FILE *log)
 	return err;
 }/* read_local */
 
+#define WFD_FAST_RETRY_CNT_LIMIT	    240
+#define WFD_FAST_INTERVAL_USEC		 250000
+#define WFD_LASY_INTERVAL_USEC		1000000
+
+static int
+wait_for_device_open(const char *dev)
+{
+	char progress[] = "|/-\\";
+	unsigned long progress_cnt = 0;
+	int fd = -1;
+
+	fprintf(stderr, "\n<<<<<<< Wait for device %s : ", dev);
+	while(fd < 0) {
+		fd = open(dev, O_RDWR);
+		if (0 > fd ) {
+			if ((ENODEV == errno) || (ENOENT == errno)) {
+				if (progress_cnt % 2) {
+					fprintf(stderr, "\b");
+				}
+				else {
+					if (0 == (progress_cnt % 100) ) {
+						fprintf(stderr, ".");
+					}
+					fprintf(stderr, "%c", progress[(progress_cnt >> 1) % 4]);
+				}
+				if (WFD_FAST_RETRY_CNT_LIMIT < progress_cnt) {
+					usleep(WFD_LASY_INTERVAL_USEC);
+				}
+				else {
+					//sched_yield();
+					usleep(WFD_FAST_INTERVAL_USEC);
+				}
+			}
+			else {
+				fprintf(stderr, " [Error] fd = %d, errno = %d>>>>>>>\n", fd, errno);
+				return fd;
+			}
+		}
+		progress_cnt++;
+	}
+	fprintf(stderr, " [OK] >>>>>>>\n");
+	return fd;
+}
+
 /*
  * メインループ
  */
@@ -1470,9 +1515,37 @@ static int
 nain(int localfd, const char *dev, FILE *log)
 {
 	int err = -1;
-	int remotefd = open(dev, O_RDWR);
-	if (remotefd < 0)
+	int remotefd = -1;
+
+	if (wait_for_dev_mode) {
+		remotefd = wait_for_device_open(dev);
+	}
+	else {
+		remotefd = open(dev, O_RDWR);
+	}
+
+
+	if (remotefd < 0) {
 		perror(dev);
+	}
+	else if (wait_for_dev_mode) {
+		do {
+			if (make_local_raw(localfd) == 0 && fd_init(remotefd) == 0 && set_fdstatus(remotefd) == 0) {
+				//if (!is_server) {
+				if (!is_server && (-ENODEV != err) ) {
+					print_fdstatus(remotefd);
+				}
+
+				err = fnain(localfd, remotefd, log);
+				if (-ENODEV == err) {
+					close(remotefd);
+					restore_local_terminal();
+					remotefd = wait_for_device_open(dev);
+				}
+			}
+		} while (-ENODEV == err);
+		close(remotefd);
+	}
 	else {
 		if (make_local_raw(localfd) == 0 && fd_init(remotefd) == 0 && set_fdstatus(remotefd) == 0) {
 			if (!is_server)
@@ -1600,7 +1673,7 @@ main(int argc, char *argv[])
 	char *logfile = NULL;
 	int daemon = 0;
 	myname = argv[0];
-	while ((ch = getopt(argc, argv, "46b:d:Df:Fijl:p:P:r:s:TVxz")) != EOF) {
+	while ((ch = getopt(argc, argv, "46b:d:Df:Fijl:p:P:r:s:TVwxz")) != EOF) {
 		switch (ch) {
 			int x;
 		default:
@@ -1693,6 +1766,9 @@ main(int argc, char *argv[])
 				stop_bit = 3;
 			else	
 				show_usage = 1;
+			break;
+		case 'w':
+			wait_for_dev_mode = 1;
 			break;
 		case 'x':
 			hex_mode = 1;
