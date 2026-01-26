@@ -32,7 +32,7 @@
 - [x] 日本語入った File を UTF-8 へ
 - [x] Originalと共存のため、jerm ==> jerm-wx へ改名
 - [x] GitHUB 向けに README 系の整理
-- [ ] Wait for device extend patch の Merge
+- [x] Wait for device extend patch の Merge
 - [ ] Binary file transmit patch の 設計 & Merge
     - 某SoC のリカバリをできるようにしたい
     - Win11+Teraterm でしかできない作業を無くしたい
