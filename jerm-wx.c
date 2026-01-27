@@ -1,7 +1,15 @@
 /*
+    SPDX-FileCopyrightText: 2004 candy
+    SPDX-FileCopyrightText: 2026 Sakae OTAKI <niagara.ta.ki.no@gmail.com>
+
+    SPDX-License-Identifier: BSD-2-Clause
+*/
+
+/*
+ * Origin identifier to jerm.c :
+ *
  * jerm.c - terminal emulator
  * Copyright (C) 2000, 2001, 2002, 2003, 2004 candy
- * $Id: jerm.c,v 1.25 2007/08/09 09:04:43 candy Exp candy $
  */
 #include <ctype.h>
 #include <errno.h>
